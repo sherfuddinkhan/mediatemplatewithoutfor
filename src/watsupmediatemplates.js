@@ -10,8 +10,8 @@ const WhatsAppMessageSender = () => {
   const [isSending, setIsSending] = useState(false);
 
   // WhatsApp API credentials (replace with your own)
-  const phoneNumberId = '401844556348088';
-  const accessToken = 'EAA0TJRMXUXMBOxW2Sa0PSNtIGDwqjRaYw8oORzVm6ulVq1YsZAjXbtfAZCMTIAxnWLCyOBu5jyjd3b0Tm3ZC24LQZCDcYSpaegCIN0LWOttKqBthjZBxNZCNzAIQeIG4xOc8crQS5X6ymxZBLpo3rwmrOx33shIeWAjeNhgweqJL1GIaZCDgRlyp58YEMz2cQtIbLnZCOfRN5lqL0GmJ7t7bjnTIeEsMZD';
+  const phoneNumberId = '702693576252934';
+  const accessToken = 'EAAKFrmuEzYYBO7qLLZBqqwH7uTFdj3rLMrZCDSkrrdnHMmjBxbWt82mjF0sCfHUIQujqCht9ibMohNpAnZAcNXDVuiz6TrZCY7v2egCEp7XxULRMGrsWIL75QDhgidQ6XxmNK3vFFjvkacPaTC0V5Nmf5K7Pp3reAHFo9fXGiMBYMLk8KroTPF6DuFqhPRygokA2IoCZB00FhTsB1bDtMZCZAUQuKFvSkF39NC8ZBouEsFaq40JX0ysZD';
 
   // Handle file input changes
   const handleCsvChange = (event) => {
@@ -59,7 +59,7 @@ const WhatsAppMessageSender = () => {
       to: phoneNumber,
       type: 'template',
       template: {
-        name: 'order_invoice',
+        name: 'order_invoice1',
         language: { code: 'en' },
         components: [
           {
@@ -74,13 +74,13 @@ const WhatsAppMessageSender = () => {
               },
             ],
           },
-          {
-            type: 'body',
-            parameters: [
-              { type: 'text', text: recipientName || 'Customer' },
-              { type: 'text', text: orderNumber || 'N/A' },
-            ],
-          },
+          // {
+          //   type: 'body',
+          //   parameters: [
+          //     { type: 'text', text: recipientName || 'Customer' },
+          //     { type: 'text', text: orderNumber || 'N/A' },
+          //   ],
+          // },
         ],
       },
     };
@@ -108,7 +108,7 @@ const WhatsAppMessageSender = () => {
       type: 'template',
       template: {
         name: 'promo_image_offer',
-        language: { code: 'en_US' },
+        language: { code: 'en' },
         components: [
           {
             type: 'header',
@@ -123,9 +123,9 @@ const WhatsAppMessageSender = () => {
           },
           {
             type: 'body',
-            parameters: [
-              { type: 'text', text: recipientName || 'Customer' },
-            ],
+            // parameters: [
+            //   { type: 'text', text: recipientName || 'Customer' },
+            // ],
           },
         ],
       },
@@ -179,17 +179,19 @@ const WhatsAppMessageSender = () => {
 
           // Send messages to each recipient
           for (const recipient of recipients) {
-            const phoneNumber = recipient.phone_number?.trim();
+            console.log("recipient", recipient.phone_number?.trim());
+             const phoneNumber = Number(recipient.phone_number);
+           // const phoneNumber = "919618240757";
             const recipientName = recipient.name || 'Customer';
             const orderNumber = recipient.order_number || 'N/A';
 
-            if (!phoneNumber || !phoneNumber.startsWith('+')) {
-              setStatus((prev) => [
-                ...prev,
-                { message: `Skipped invalid phone number: ${phoneNumber || 'N/A'}`, success: false },
-              ]);
-              continue;
-            }
+            // if (!phoneNumber || !phoneNumber.startsWith('+')) {
+            //   setStatus((prev) => [
+            //     ...prev,
+            //     { message: `Skipped invalid phone number: ${phoneNumber || 'N/A'}`, success: false },
+            //   ]);
+            //   continue;
+            // }
 
             try {
               // Send PDF template if PDF is uploaded
