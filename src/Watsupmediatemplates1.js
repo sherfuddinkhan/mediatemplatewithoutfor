@@ -2,32 +2,68 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import Papa from 'papaparse';
 
-const WhatsAppMessageSender1= () => {
+const WhatsAppMessageSender1 = () => {
   const [csvFile, setCsvFile] = useState(null);
-  const [pdfFile, setPdfFile] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
+  const [mediaType, setMediaType] = useState('document');
+  const [mediaFile, setMediaFile] = useState(null);
+  const [recipients, setRecipients] = useState([]);
   const [status, setStatus] = useState([]);
   const [isSending, setIsSending] = useState(false);
 
-  // Replace with your actual credentials
   const phoneNumberId = '702693576252934';
-  const accessToken = 'EAAKFrmuEzYYBO5JFPxNSyInkPmGkB20M1hhZCZCNtFAxURGiENG5WhZAHHH7baZCOOofW0qrSl7YQwvzgeTfjPx5iXPND8KkDqKCZCAxcweEAzUgZCbKQ5YmZAEFoQrm1LqGFeFdIcHxHQMlyUUObTNtUmbphvOZB9aNrv5fRZAPNKDKlZCoqfaPKZBgko3QOfiLubg8t5cagniywDJd9xrSK8CAdN9O6sIieTZAdL3sCipo5Ja539Tv'; // Truncated for security
+  const accessToken = 'REPLACE_YOUR_TOKEN'; // Replace with your token securely
 
-  // List of static phone numbers to send to before CSV contacts
-  const staticNumbers = [
-    { phone_number: '919160422485', name: 'Static User 1', order_number: 'ST001' },
-    { phone_number: '919542393872', name: 'Static User 2', order_number: 'ST002' },
-  ];
+  // Handle CSV file upload and parse phone numbers with checkboxes initially checked
+  const handleCsvChange = (event) => {
+    const file = event.target.files[0];
+    setCsvFile(file);
+    setStatus([]);
+    if (!file) {
+      setRecipients([]);
+      return;
+    }
 
-  const handleCsvChange = (e) => setCsvFile(e.target.files[0]);
-  const handlePdfChange = (e) => setPdfFile(e.target.files[0]);
-  const handleImageChange = (e) => setImageFile(e.target.files[0]);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (result) => {
+        // Filter valid rows with phone_number, initialize checked=true
+        const rows = result.data.filter(row => row.phone_number && row.phone_number.trim() !== '');
+        const withCheckbox = rows.map(row => ({
+          phone_number: row.phone_number.trim(),
+          checked: true,
+        }));
+        setRecipients(withCheckbox);
+      },
+    });
+  };
 
-  const uploadMedia = async (file, mediaType) => {
+  // Toggle individual recipient checkbox
+  const handleCheckboxChange = (index) => {
+    setRecipients(prev => {
+      const updated = [...prev];
+      updated[index].checked = !updated[index].checked;
+      return updated;
+    });
+  };
+
+  // Handle media type selection
+  const handleMediaTypeChange = (e) => {
+    setMediaType(e.target.value);
+    setMediaFile(null);
+  };
+
+  // Handle media file upload
+  const handleMediaFileChange = (event) => {
+    setMediaFile(event.target.files[0]);
+  };
+
+  // Upload media to WhatsApp and get media ID
+  const uploadMedia = async (file, type) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('messaging_product', 'whatsapp');
-    formData.append('type', mediaType);
+    formData.append('type', type === 'document' ? 'application/pdf' : 'image/jpeg');
 
     const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/media`;
     const headers = {
@@ -39,20 +75,34 @@ const WhatsAppMessageSender1= () => {
     return response.data.id;
   };
 
-  const sendPDFTemplateMessage = async (phone, mediaId, name, order) => {
+  // Send template message to a single phone number with media ID
+  const sendTemplateMessage = async (phoneNumber, mediaId) => {
     const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
     const data = {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to: phone,
+      to: phoneNumber,
       type: 'template',
       template: {
-        name: 'order_invoice1',
+        name: mediaType === 'document' ? 'order_invoice1' : 'promo_image_offer',
         language: { code: 'en' },
         components: [
           {
             type: 'header',
-            parameters: [{ type: 'document', document: { id: mediaId, filename: 'Invoice.pdf' } }],
+            parameters: [
+              mediaType === 'document'
+                ? {
+                    type: 'document',
+                    document: {
+                      id: mediaId,
+                      filename: 'Invoice.pdf',
+                    },
+                  }
+                : {
+                    type: 'image',
+                    image: { id: mediaId },
+                  },
+            ],
           },
         ],
       },
@@ -64,61 +114,19 @@ const WhatsAppMessageSender1= () => {
     };
 
     const response = await axios.post(url, data, { headers });
-    return response.data.messages?.[0]?.id || 'N/A';
+    return response.data.messages?.[0]?.id;
   };
 
-  const sendImageTemplateMessage = async (phone, mediaId, name) => {
-    const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
-    const data = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: phone,
-      type: 'template',
-      template: {
-        name: 'promo_image_offer',
-        language: { code: 'en' },
-        components: [
-          {
-            type: 'header',
-            parameters: [{ type: 'image', image: { id: mediaId } }],
-          },
-        ],
-      },
-    };
-
-    const headers = {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    };
-
-    const response = await axios.post(url, data, { headers });
-    return response.data.messages?.[0]?.id || 'N/A';
-  };
-
-  const sendToRecipients = async (recipients, pdfMediaId, imageMediaId) => {
-    for (const recipient of recipients) {
-      const phone = recipient.phone_number.trim();
-      const name = recipient.name || 'Customer';
-      const order = recipient.order_number || 'N/A';
-
-      try {
-        if (pdfMediaId) {
-          const msgId = await sendPDFTemplateMessage(phone, pdfMediaId, name, order);
-          setStatus((prev) => [...prev, { message: `PDF sent to ${phone} (Message ID: ${msgId})`, success: true }]);
-        }
-        if (imageMediaId) {
-          const msgId = await sendImageTemplateMessage(phone, imageMediaId, name);
-          setStatus((prev) => [...prev, { message: `Image sent to ${phone} (Message ID: ${msgId})`, success: true }]);
-        }
-      } catch (err) {
-        setStatus((prev) => [...prev, { message: `Error sending to ${phone}: ${err.message}`, success: false }]);
-      }
-    }
-  };
-
+  // Send messages to all selected recipients
   const handleSendMessages = async () => {
-    if (!pdfFile && !imageFile) {
-      alert('Upload at least a PDF or Image file.');
+    if (!mediaFile) {
+      alert('Please upload a media file.');
+      return;
+    }
+
+    const selectedRecipients = recipients.filter(r => r.checked);
+    if (selectedRecipients.length === 0) {
+      alert('Please select at least one number.');
       return;
     }
 
@@ -126,73 +134,105 @@ const WhatsAppMessageSender1= () => {
     setStatus([]);
 
     try {
-      let pdfMediaId = null;
-      let imageMediaId = null;
+      const mediaId = await uploadMedia(mediaFile, mediaType);
 
-      if (pdfFile) pdfMediaId = await uploadMedia(pdfFile, 'application/pdf');
-      if (imageFile) imageMediaId = await uploadMedia(imageFile, 'image/jpeg');
-
-      // Send to static numbers first
-      await sendToRecipients(staticNumbers, pdfMediaId, imageMediaId);
-
-      // Parse and send to CSV numbers
-      if (csvFile) {
-        Papa.parse(csvFile, {
-          header: true,
-          complete: async (results) => {
-            const csvRecipients = results.data.filter(r => r.phone_number?.trim());
-            if (!csvRecipients.length) {
-              setStatus((prev) => [...prev, { message: 'No valid phone numbers found in CSV.', success: false }]);
-            } else {
-              await sendToRecipients(csvRecipients, pdfMediaId, imageMediaId);
-            }
-            setIsSending(false);
-            alert('All messages sent.');
-          },
-          error: (error) => {
-            setStatus([{ message: `CSV Error: ${error.message}`, success: false }]);
-            setIsSending(false);
-          },
-        });
-      } else {
-        setIsSending(false);
-        alert('Static messages sent. No CSV uploaded.');
+      for (const recipient of selectedRecipients) {
+        try {
+          const messageId = await sendTemplateMessage(recipient.phone_number, mediaId);
+          setStatus((prev) => [
+            ...prev,
+            { message: `${mediaType.toUpperCase()} sent to ${recipient.phone_number} (Message ID: ${messageId})`, success: true },
+          ]);
+        } catch (err) {
+          setStatus((prev) => [
+            ...prev,
+            { message: `Failed to send to ${recipient.phone_number}: ${err.message}`, success: false },
+          ]);
+        }
       }
-    } catch (error) {
-      setStatus([{ message: `Error: ${error.message}`, success: false }]);
-      setIsSending(false);
+    } catch (uploadErr) {
+      setStatus([{ message: `Upload failed: ${uploadErr.message}`, success: false }]);
     }
+
+    setIsSending(false);
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
-      <h2>Send WhatsApp Messages</h2>
+    <div style={{ padding: 20, maxWidth: 700, margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
+      <h2>Send WhatsApp Template Messages</h2>
 
-      <div>
-        <label>Upload CSV (.csv with "phone_number"):</label>
-        <input type="file" accept=".csv" onChange={handleCsvChange} disabled={isSending} />
+      <div style={{ marginBottom: 15 }}>
+        <label>
+          Upload CSV: &nbsp;
+          <input type="file" accept=".csv" onChange={handleCsvChange} disabled={isSending} />
+        </label>
       </div>
 
-      <div>
-        <label>Upload PDF (optional):</label>
-        <input type="file" accept=".pdf" onChange={handlePdfChange} disabled={isSending} />
+      <div style={{ marginBottom: 15 }}>
+        <label>
+          Select Media Type: &nbsp;
+          <select value={mediaType} onChange={handleMediaTypeChange} disabled={isSending}>
+            <option value="document">Document (PDF)</option>
+            <option value="image">Image (JPEG/PNG)</option>
+          </select>
+        </label>
       </div>
 
-      <div>
-        <label>Upload Image (optional):</label>
-        <input type="file" accept="image/jpeg,image/png" onChange={handleImageChange} disabled={isSending} />
+      <div style={{ marginBottom: 15 }}>
+        <label>
+          Upload {mediaType === 'document' ? 'Document (PDF)' : 'Image (JPEG/PNG)'}: &nbsp;
+          <input
+            type="file"
+            accept={mediaType === 'document' ? 'application/pdf' : 'image/jpeg,image/png'}
+            onChange={handleMediaFileChange}
+            disabled={isSending}
+          />
+        </label>
       </div>
 
-      <button onClick={handleSendMessages} disabled={isSending}>
-        {isSending ? 'Sending...' : 'Send Messages'}
-      </button>
+      {recipients.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <h3>Recipients</h3>
+          <table border="1" width="100%" cellPadding="5" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th>Send</th>
+                <th>Phone Number</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recipients.map((r, index) => (
+                <tr key={index}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={r.checked}
+                      onChange={() => handleCheckboxChange(index)}
+                      disabled={isSending}
+                    />
+                  </td>
+                  <td>{r.phone_number}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      <div style={{ marginTop: '20px' }}>
+      <div style={{ marginTop: 20 }}>
+        <button onClick={handleSendMessages} disabled={isSending || recipients.length === 0}>
+          {isSending ? 'Sending...' : 'Send Messages'}
+        </button>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
         <h3>Status</h3>
         {status.length > 0 ? (
           <ul>
-            {status.map((s, i) => (
-              <li key={i} style={{ color: s.success ? 'green' : 'red' }}>{s.message}</li>
+            {status.map((item, i) => (
+              <li key={i} style={{ color: item.success ? 'green' : 'red' }}>
+                {item.message}
+              </li>
             ))}
           </ul>
         ) : (
