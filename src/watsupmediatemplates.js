@@ -11,7 +11,7 @@ const WhatsAppMessageSender = () => {
 
   // WhatsApp API credentials (replace with your own)
   const phoneNumberId = '702693576252934';
-  const accessToken = 'EAAKFrmuEzYYBO7qLLZBqqwH7uTFdj3rLMrZCDSkrrdnHMmjBxbWt82mjF0sCfHUIQujqCht9ibMohNpAnZAcNXDVuiz6TrZCY7v2egCEp7XxULRMGrsWIL75QDhgidQ6XxmNK3vFFjvkacPaTC0V5Nmf5K7Pp3reAHFo9fXGiMBYMLk8KroTPF6DuFqhPRygokA2IoCZB00FhTsB1bDtMZCZAUQuKFvSkF39NC8ZBouEsFaq40JX0ysZD';
+  const accessToken = 'EAAKFrmuEzYYBO5JFPxNSyInkPmGkB20M1hhZCZCNtFAxURGiENG5WhZAHHH7baZCOOofW0qrSl7YQwvzgeTfjPx5iXPND8KkDqKCZCAxcweEAzUgZCbKQ5YmZAEFoQrm1LqGFeFdIcHxHQMlyUUObTNrUmbphvOZB9aNrv5fRZAPNKDKlZCoqfaPKZBgko3QOfiLubg8t5cagniywDJd9xrSK8CAdN9O6sIieTZAdL3sCipo5Ja539Tv'; // Truncated for security
 
   // Handle file input changes
   const handleCsvChange = (event) => {
@@ -155,70 +155,78 @@ const WhatsAppMessageSender = () => {
     setStatus([]);
 
     try {
-      // Parse CSV file
       Papa.parse(csvFile, {
         header: true,
         complete: async (result) => {
-          const recipients = result.data;
-          if (!recipients.length || !recipients[0].phone_number) {
-            setStatus([{ message: 'Error: CSV must contain a "phone_number" column.', success: false }]);
+          const recipients = result.data.filter(row => row.phone_number); // Filter out rows without phone numbers
+          if (!recipients.length) {
+            setStatus([{ message: 'Error: CSV must contain a "phone_number" column with valid numbers.', success: false }]);
             setIsSending(false);
             return;
           }
 
-          // Upload media files
           let pdfMediaId = null;
           let imageMediaId = null;
 
           if (pdfFile) {
-            pdfMediaId = await uploadMedia(pdfFile, 'application/pdf');
+            try {
+              pdfMediaId = await uploadMedia(pdfFile, 'application/pdf');
+              setStatus((prev) => [...prev, { message: 'PDF uploaded successfully.', success: true }]);
+            } catch (error) {
+              setStatus((prev) => [...prev, { message: `PDF upload failed: ${error.message}`, success: false }]);
+              setIsSending(false);
+              return; // Stop if media upload fails
+            }
           }
           if (imageFile) {
-            imageMediaId = await uploadMedia(imageFile, 'image/jpeg');
-          }
-
-          // Send messages to each recipient
-          //Ateeq Changes !
-          for (const recipient of recipients) {
-            console.log("recipient", recipient.phone_number?.trim());
-             const phoneNumber = Number(recipient.phone_number);
-           // const phoneNumber = "919618240757";
-            const recipientName = recipient.name || 'Customer';
-            const orderNumber = recipient.order_number || 'N/A';
-
-            // if (!phoneNumber || !phoneNumber.startsWith('+')) {
-            //   setStatus((prev) => [
-            //     ...prev,
-            //     { message: `Skipped invalid phone number: ${phoneNumber || 'N/A'}`, success: false },
-            //   ]);
-            //   continue;
-            // }
-
             try {
-              // Send PDF template if PDF is uploaded
-              if (pdfMediaId) {
-                const result = await sendPDFTemplateMessage(phoneNumber, pdfMediaId, recipientName, orderNumber);
-                setStatus((prev) => [
-                  ...prev,
-                  { message: `PDF sent to ${phoneNumber} (Message ID: ${result.messageId})`, success: true },
-                ]);
-              }
-
-              // Send Image template if Image is uploaded
-              if (imageMediaId) {
-                const result = await sendImageTemplateMessage(phoneNumber, imageMediaId, recipientName);
-                setStatus((prev) => [
-                  ...prev,
-                  { message: `Image sent to ${phoneNumber} (Message ID: ${result.messageId})`, success: true },
-                ]);
-              }
+              imageMediaId = await uploadMedia(imageFile, 'image/jpeg');
+              setStatus((prev) => [...prev, { message: 'Image uploaded successfully.', success: true }]);
             } catch (error) {
-              setStatus((prev) => [...prev, { message: error.message, success: false }]);
+              setStatus((prev) => [...prev, { message: `Image upload failed: ${error.message}`, success: false }]);
+              setIsSending(false);
+              return; // Stop if media upload fails
             }
           }
 
+          const messagePromises = recipients.map(async (recipient) => {
+            const phoneNumber = String(recipient.phone_number).trim(); // Ensure it's a string and trim
+            const recipientName = recipient.name || 'Customer';
+            const orderNumber = recipient.order_number || 'N/A';
+
+            if (!phoneNumber) {
+              return { message: `Skipping recipient with missing phone number.`, success: false };
+            }
+
+            try {
+              if (pdfMediaId) {
+                const result = await sendPDFTemplateMessage(phoneNumber, pdfMediaId, recipientName, orderNumber);
+                return { message: `PDF sent to ${phoneNumber} (Message ID: ${result.messageId})`, success: true };
+              }
+              if (imageMediaId) {
+                const result = await sendImageTemplateMessage(phoneNumber, imageMediaId, recipientName);
+                return { message: `Image sent to ${phoneNumber} (Message ID: ${result.messageId})`, success: true };
+              }
+              return { message: `No media type selected for ${phoneNumber}.`, success: false };
+            } catch (error) {
+              return { message: `Error sending to ${phoneNumber}: ${error.message}`, success: false };
+            }
+          });
+
+          const results = await Promise.allSettled(messagePromises);
+
+          results.forEach((result) => {
+            if (result.status === 'fulfilled') {
+              setStatus((prev) => [...prev, result.value]);
+            } else {
+              // This case should ideally be caught by the individual try-catch in the map
+              // but it's good for robustness.
+              setStatus((prev) => [...prev, { message: `Failed to process a message: ${result.reason}`, success: false }]);
+            }
+          });
+
           setIsSending(false);
-          alert('Message sending completed. Check status for details.');
+          alert('Message sending process initiated. Check status for individual details.');
         },
         error: (error) => {
           setStatus([{ message: `Error parsing CSV: ${error.message}`, success: false }]);
@@ -226,7 +234,7 @@ const WhatsAppMessageSender = () => {
         },
       });
     } catch (error) {
-      setStatus([{ message: `Error: ${error.message}`, success: false }]);
+      setStatus([{ message: `General error: ${error.message}`, success: false }]);
       setIsSending(false);
     }
   };
