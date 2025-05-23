@@ -178,6 +178,7 @@ const WhatsAppMessageSender = () => {
           }
 
           // Send messages to each recipient
+          //Ateeq Changes !
           for (const recipient of recipients) {
             console.log("recipient", recipient.phone_number?.trim());
              const phoneNumber = Number(recipient.phone_number);
